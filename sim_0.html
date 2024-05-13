@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>PVFS 1 - Simulation Step</title>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+  <canvas id="simCanvas"></canvas>
+
+  <div id="overlay">
+    <p id="fps">FPS: 0</p>
+    <p>
+      <label for="numParticles"># Particles:</label>
+      <select name="numParticles" id="numParticles">
+        <option value="1000">1K</option>
+        <option value="10000">10K</option>
+        <option value="100000">100K</option>
+        <option value="1000000">1M</option>
+      </select>
+    </p>
+    <p>
+      <button id="startButton">Start</button>
+      <button id="pauseButton">Pause</button>
+      <button id="resetButton">Reset</button>
+    </p>
+  </div>
+
+  <script src="fpsMonitor.js"></script>
+  <script src="sim_0.js"></script>
+  <script src="run_0.js"></script>
+</body>
+
+</html>
