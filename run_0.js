@@ -44,3 +44,9 @@ document.getElementById("numParticles").addEventListener("input", (e) => {
   numParticles = e.target.value;
   simulator = new Simulator(canvas.width, canvas.height, numParticles);
 });
+
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  simulator.resize(canvas.width, canvas.height);
+});
