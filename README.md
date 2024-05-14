@@ -1,2 +1,2 @@
-# particle_based_viscoelastic_fluid
- Implementation of Particle-based Viscoelastic Fluid Simulation
+# Particle-based Viscoelastic Fluid Simulation
+ Implementation of Particle-based Viscoelastic Fluid Simulation, Simon Clavet, Philippe Beaudoin, and Pierre Poulin
