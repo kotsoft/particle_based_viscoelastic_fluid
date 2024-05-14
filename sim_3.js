@@ -8,6 +8,9 @@ class Particle {
 
     this.velX = velX;
     this.velY = velY;
+
+    this.dispX = 0;
+    this.dispY = 0;
   }
 }
 
@@ -101,6 +104,9 @@ class Simulator {
     this.adjustSprings(dt);
     this.applySpringDisplacements(dt);
     this.doubleDensityRelaxation(dt);
+
+    this.applyPressureDisplacements(dt);
+
     this.resolveCollisions(dt);
 
     for (let p of this.particles) {
@@ -253,23 +259,23 @@ class Simulator {
       const closestX = Math.min(p0.posX, this.width - p0.posX);
       const closestY = Math.min(p0.posY, this.height - p0.posY);
 
-      // if (closestX < kernelRadius) {
-      //   const q = closestX / kernelRadius;
-      //   const closeness = 1 - q;
-      //   const closenessSq = closeness * closeness;
+      if (closestX < kernelRadius) {
+        const q = closestX / kernelRadius;
+        const closeness = 1 - q;
+        const closenessSq = closeness * closeness;
 
-      //   density += closeness * closeness;
-      //   nearDensity += closeness * closenessSq;
-      // }
+        density += closeness * closeness;
+        nearDensity += closeness * closenessSq;
+      }
 
-      // if (closestY < kernelRadius) {
-      //   const q = closestY / kernelRadius;
-      //   const closeness = 1 - q;
-      //   const closenessSq = closeness * closeness;
+      if (closestY < kernelRadius) {
+        const q = closestY / kernelRadius;
+        const closeness = 1 - q;
+        const closenessSq = closeness * closeness;
 
-      //   density += closeness * closeness;
-      //   nearDensity += closeness * closenessSq;
-      // }
+        density += closeness * closeness;
+        nearDensity += closeness * closenessSq;
+      }
 
       // Compute pressure and near-pressure
       const pressure = stiffness * (density - restDensity);
@@ -286,15 +292,15 @@ class Simulator {
         const DX = D * neighborUnitX[j];
         const DY = D * neighborUnitY[j];
 
-        p1.posX += DX;
-        p1.posY += DY;
+        p1.dispX += DX;
+        p1.dispY += DY;
 
         dispX -= DX;
         dispY -= DY;
       }
 
-      p0.posX += dispX;
-      p0.posY += dispY;
+      p0.dispX += dispX;
+      p0.dispY += dispY;
     }
   }
 
@@ -325,6 +331,16 @@ class Simulator {
 
       this.particleListNextIdx[i] = this.particleListHeads[bucketIdx];
       this.particleListHeads[bucketIdx] = i;
+    }
+  }
+
+  applyPressureDisplacements(dt) {
+    for (let p of this.particles) {
+      p.posX += p.dispX * .5;
+      p.posY += p.dispY * .5;
+
+      p.dispX = 0;
+      p.dispY = 0;
     }
   }
 

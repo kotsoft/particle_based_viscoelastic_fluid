@@ -127,7 +127,11 @@ class Simulator {
       let numNeighbors = 0;
 
       // Compute density and near-density
-      for (let j = i + 1; j < numParticles; j++) {
+      for (let j = 0; j < numParticles; j++) {
+        if (i === j) {
+          continue;
+        }
+
         let p1 = this.particles[j];
 
         const diffX = p1.posX - p0.posX;
