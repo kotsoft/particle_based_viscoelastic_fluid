@@ -8,6 +8,9 @@ class Particle {
 
     this.velX = velX;
     this.velY = velY;
+
+    this.dispX = 0;
+    this.dispY = 0;
   }
 }
 
@@ -29,15 +32,7 @@ class Simulator {
 
     this.useSpatialHash = true;
     this.numHashBuckets = 1000;
-    this.numActiveBuckets = 0;
-    this.activeBuckets = [];
     this.particleListHeads = []; // Same size as numHashBuckets, each points to first particle in bucket list
-
-    for (let i = 0; i < this.numHashBuckets; i++) {
-      this.particleListHeads.push(-1);
-      this.activeBuckets.push(0);
-    }
-
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
   }
 
@@ -109,6 +104,9 @@ class Simulator {
     this.adjustSprings(dt);
     this.applySpringDisplacements(dt);
     this.doubleDensityRelaxation(dt);
+
+    this.applyPressureDisplacements(dt);
+
     this.resolveCollisions(dt);
 
     for (let p of this.particles) {
@@ -135,20 +133,16 @@ class Simulator {
     const neighborCloseness = [];
     const visitedBuckets = [];
 
-    const numActiveBuckets = this.numActiveBuckets;
+    for (let i = 0; i < numParticles; i++) {
+      let p0 = this.particles[i];
 
-    for (let abIdx = 0; abIdx < numActiveBuckets; abIdx++) {
-      let selfIdx = this.particleListHeads[this.activeBuckets[abIdx]];
+      let density = 0;
+      let nearDensity = 0;
 
-      while (selfIdx != -1) {
-        let p0 = this.particles[selfIdx];
+      let numNeighbors = 0;
+      let numVisitedBuckets = 0;
 
-        let density = 0;
-        let nearDensity = 0;
-
-        let numNeighbors = 0;
-        let numVisitedBuckets = 0;
-
+      if (this.useSpatialHash) {
         // Compute density and near-density
         const bucketX = Math.floor(p0.posX * kernelRadiusInv);
         const bucketY = Math.floor(p0.posY * kernelRadiusInv);
@@ -176,7 +170,7 @@ class Simulator {
             let neighborIdx = this.particleListHeads[bucketIdx];
 
             while (neighborIdx != -1) {
-              if (neighborIdx === selfIdx) {
+              if (neighborIdx === i) {
                 neighborIdx = this.particleListNextIdx[neighborIdx];
                 continue;
               }
@@ -219,57 +213,94 @@ class Simulator {
             }
           }
         }
+      } else {
+        // The old n^2 way
 
+        for (let j = 0; j < numParticles; j++) {
+          if (i === j) {
+            continue;
+          }
 
-        // Add wall density
-        const closestX = Math.min(p0.posX, this.width - p0.posX);
-        const closestY = Math.min(p0.posY, this.height - p0.posY);
+          let p1 = this.particles[j];
 
-        // if (closestX < kernelRadius) {
-        //   const q = closestX / kernelRadius;
-        //   const closeness = 1 - q;
-        //   const closenessSq = closeness * closeness;
+          const diffX = p1.posX - p0.posX;
 
-        //   density += closeness * closeness;
-        //   nearDensity += closeness * closenessSq;
-        // }
+          if (diffX > kernelRadius || diffX < -kernelRadius) {
+            continue;
+          }
 
-        // if (closestY < kernelRadius) {
-        //   const q = closestY / kernelRadius;
-        //   const closeness = 1 - q;
-        //   const closenessSq = closeness * closeness;
+          const diffY = p1.posY - p0.posY;
 
-        //   density += closeness * closeness;
-        //   nearDensity += closeness * closenessSq;
-        // }
+          if (diffY > kernelRadius || diffY < -kernelRadius) {
+            continue;
+          }
 
-        // Compute pressure and near-pressure
-        const pressure = stiffness * (density - restDensity);
-        const nearPressure = nearStiffness * nearDensity;
+          const rSq = diffX * diffX + diffY * diffY;
 
-        let dispX = 0;
-        let dispY = 0;
+          if (rSq < kernelRadiusSq) {
+            const r = Math.sqrt(rSq);
+            const q = r / kernelRadius;
+            const closeness = 1 - q;
+            const closenessSq = closeness * closeness;
 
-        for (let j = 0; j < numNeighbors; j++) {
-          let p1 = this.particles[neighborIndices[j]];
+            density += closeness * closeness;
+            nearDensity += closeness * closenessSq;
 
-          const closeness = neighborCloseness[j];
-          const D = dt * dt * (pressure * closeness + nearPressure * closeness * closeness) / 2;
-          const DX = D * neighborUnitX[j];
-          const DY = D * neighborUnitY[j];
-
-          p1.posX += DX;
-          p1.posY += DY;
-
-          dispX -= DX;
-          dispY -= DY;
+            neighborIndices[numNeighbors] = j;
+            neighborUnitX[numNeighbors] = diffX / r;
+            neighborUnitY[numNeighbors] = diffY / r;
+            neighborCloseness[numNeighbors] = closeness;
+            numNeighbors++;
+          }
         }
-
-        p0.posX += dispX;
-        p0.posY += dispY;
-
-        selfIdx = this.particleListNextIdx[selfIdx];
       }
+
+      // Add wall density
+      const closestX = Math.min(p0.posX, this.width - p0.posX);
+      const closestY = Math.min(p0.posY, this.height - p0.posY);
+
+      if (closestX < kernelRadius) {
+        const q = closestX / kernelRadius;
+        const closeness = 1 - q;
+        const closenessSq = closeness * closeness;
+
+        density += closeness * closeness;
+        nearDensity += closeness * closenessSq;
+      }
+
+      if (closestY < kernelRadius) {
+        const q = closestY / kernelRadius;
+        const closeness = 1 - q;
+        const closenessSq = closeness * closeness;
+
+        density += closeness * closeness;
+        nearDensity += closeness * closenessSq;
+      }
+
+      // Compute pressure and near-pressure
+      const pressure = stiffness * (density - restDensity);
+      const nearPressure = nearStiffness * nearDensity;
+
+      let dispX = 0;
+      let dispY = 0;
+
+      for (let j = 0; j < numNeighbors; j++) {
+        let p1 = this.particles[neighborIndices[j]];
+
+        const closeness = neighborCloseness[j];
+        const D = dt * dt * (pressure * closeness + nearPressure * closeness * closeness) / 2;
+        const DX = D * neighborUnitX[j];
+        const DY = D * neighborUnitY[j];
+
+        p1.dispX += DX;
+        p1.dispY += DY;
+
+        dispX -= DX;
+        dispY -= DY;
+      }
+
+      p0.dispX += dispX;
+      p0.dispY += dispY;
     }
   }
 
@@ -281,15 +312,9 @@ class Simulator {
 
   populateHashGrid() {
     // Clear the hash grid
-    for (let i = 0; i < this.numActiveBuckets; i++) {
-      this.particleListHeads[this.activeBuckets[i]] = -1;
-    }
-
     for (let i = 0; i < this.numHashBuckets; i++) {
       this.particleListHeads[i] = -1;
     }
-
-    this.numActiveBuckets = 0;
 
     // Populate the hash grid
     const numParticles = this.particles.length;
@@ -304,15 +329,18 @@ class Simulator {
 
       const bucketIdx = this.getHashBucketIdx(bucketX, bucketY);
 
-      const head = this.particleListHeads[bucketIdx];
-
-      if (head === -1) {
-        this.activeBuckets[this.numActiveBuckets] = bucketIdx;
-        this.numActiveBuckets++;
-      }
-
-      this.particleListNextIdx[i] = head;
+      this.particleListNextIdx[i] = this.particleListHeads[bucketIdx];
       this.particleListHeads[bucketIdx] = i;
+    }
+  }
+
+  applyPressureDisplacements(dt) {
+    for (let p of this.particles) {
+      p.posX += p.dispX * .5;
+      p.posY += p.dispY * .5;
+
+      p.dispX = 0;
+      p.dispY = 0;
     }
   }
 
