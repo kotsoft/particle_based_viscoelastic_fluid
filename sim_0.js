@@ -45,9 +45,14 @@ class Simulator {
   }
 
   draw(ctx) {
+    ctx.save();
+    ctx.translate(-2.5, -2.5);
+
     for (let p of this.particles) {
       ctx.fillRect(p.posX, p.posY, 5, 5);
     }
+
+    ctx.restore();
   }
 
   // Algorithm 1: Simulation step
@@ -91,19 +96,24 @@ class Simulator {
   adjustSprings(dt) { }
   applyViscosity(dt) { }
   resolveCollisions(dt) {
-    const boundaryMul = 2; // 1 is no bounce, 2 is full bounce
+    const boundaryMul = 1.9; // 1 is no bounce, 2 is full bounce
+    const boundaryMinX = 5;
+    const boundaryMaxX = this.width - 5;
+    const boundaryMinY = 5;
+    const boundaryMaxY = this.height - 5;
+
 
     for (let p of this.particles) {
-      if (p.posX < 0) {
-        p.posX += Math.abs(p.velX) * boundaryMul;
-      } else if (p.posX > this.width) {
-        p.posX -= Math.abs(p.velX) * boundaryMul;
+      if (p.posX < boundaryMinX) {
+        p.posX += boundaryMul * (boundaryMinX - p.posX);
+      } else if (p.posX > boundaryMaxX) {
+        p.posX += boundaryMul * (boundaryMaxX - p.posX);
       }
 
-      if (p.posY < 0) {
-        p.posY += Math.abs(p.velY) * boundaryMul;
-      } else if (p.posY > this.height) {
-        p.posY -= Math.abs(p.velY) * boundaryMul;
+      if (p.posY < boundaryMinY) {
+        p.posY += boundaryMul * (boundaryMinY - p.posY);
+      } else if (p.posY > boundaryMaxY) {
+        p.posY += boundaryMul * (boundaryMaxY - p.posY);
       }
     }
   }

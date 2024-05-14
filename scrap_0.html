@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>PVFS 2.1 - Optimize Neighbor Search</title>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+  <canvas id="simCanvas"></canvas>
+
+  <div id="overlay">
+    <p id="fps">FPS: 0</p>
+    <p>
+      <label for="numParticles"># Particles:</label>
+      <select name="numParticles" id="numParticles">
+        <option value="1000">1K</option>
+        <option value="2000">2K</option>
+        <option value="5000">5K</option>
+        <option value="10000">10K</option>
+      </select>
+    </p>
+    <p>
+      <label for="useSpatialHash">Use Spatial Hash:</label>
+      <input type="checkbox" name="useSpatialHash" id="useSpatialHash" checked="true">
+    </p>
+    <p>
+      <button id="startButton">Start</button>
+      <button id="pauseButton">Pause</button>
+      <button id="resetButton">Reset</button>
+    </p>
+  </div>
+
+  <script src="fpsMonitor.js"></script>
+  <script src="scrap_0.js"></script>
+  <script src="run_0.js"></script>
+</body>
+
+</html>
