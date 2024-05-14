@@ -211,6 +211,8 @@ class Simulator {
       this.drainParticles();
     }
 
+    this.populateHashGrid();
+
     const dt = this.material.dt;
 
     const gravX = 0.02 * this.material.kernelRadius * this.material.gravX * dt;
@@ -291,7 +293,7 @@ class Simulator {
       // }
     }
 
-    this.populateHashGrid();
+
 
     this.adjustSprings(dt);
     this.applySpringDisplacements(dt);
