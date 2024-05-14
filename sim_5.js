@@ -20,6 +20,8 @@ function moveParticleData(dst, src) {
   dst.prevY = src.prevY;
   dst.velX = src.velX;
   dst.velY = src.velY;
+
+  dst.springs = src.springs;
 }
 
 class Material {
@@ -133,6 +135,8 @@ class Simulator {
   drainParticles() {
     let numParticles = this.particles.length;
 
+    const affectedIds = [];
+
     for (let i = 0; i < numParticles; i++) {
       let p = this.particles[i];
 
@@ -141,12 +145,23 @@ class Simulator {
       const distSq = dx * dx + dy * dy;
 
       if (distSq < 10000) {
+        affectedIds.push(i);
+        affectedIds.push(numParticles - 1);
         moveParticleData(p, this.particles[numParticles - 1]);
         numParticles--;
       }
     }
 
     this.particles.length = numParticles;
+
+
+    console.log(affectedIds);
+
+    for (let p of this.particles) {
+      for (let i of affectedIds) {
+        delete p.springs[i];
+      }
+    }
   }
 
   draw(ctx) {
@@ -292,8 +307,6 @@ class Simulator {
       //   p.posY += boundaryMul * (boundaryMaxY - p.posY);
       // }
     }
-
-
 
     this.adjustSprings(dt);
     this.applySpringDisplacements(dt);
