@@ -24,9 +24,44 @@
       </select>
     </p>
     <p>
-      <label for="useSpatialHash">Use Spatial Hash:</label>
-      <input type="checkbox" name="useSpatialHash" id="useSpatialHash" checked="true">
+      <label for="restDensity">Rest Density:</label>
+      <input type="range" name="restDensity" id="restDensity" min="0.1" max="8.0" step="0.1" value="4.0">
     </p>
+    <p>
+      <label for="stiffness">Stiffness:</label>
+      <input type="range" name="stiffness" id="stiffness" min="0.1" max="2.0" step="0.1" value="0.5">
+    </p>
+
+    <p>
+      <label for="nearStiffness">Near Stiffness:</label>
+      <input type="range" name="nearStiffness" id="nearStiffness" min="0.1" max="2.0" step="0.1" value="0.5">
+    </p>
+
+    <p>
+      <label for="kernelRadius">Kernel Radius:</label>
+      <input type="range" name="kernelRadius" id="kernelRadius" min="5.0" max="64.0" step="1.0" value="32.0">
+    </p>
+
+    <p>
+      <label for="pointSize">Point Size:</label>
+      <input type="range" name="pointSize" id="pointSize" min="1" max="20" step="1" value="5">
+    </p>
+
+    <p>
+      <label for="gravX">Gravity X:</label>
+      <input type="range" name="gravX" id="gravX" min="-0.5" max="0.5" step="0.01" value="0">
+    </p>
+
+    <p>
+      <label for="gravY">Gravity Y:</label>
+      <input type="range" name="gravY" id="gravY" min="-0.5" max="0.5" step="0.01" value="0.25">
+    </p>
+
+    <p>
+      <label for="dt">Time Step:</label>
+      <input type="range" name="dt" id="dt" min="0.1" max="1.0" step="0.1" value="1.0">
+    </p>
+
     <p>
       <button id="startButton">Start</button>
       <button id="pauseButton">Pause</button>

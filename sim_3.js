@@ -11,6 +11,15 @@ class Particle {
   }
 }
 
+function moveParticleData(dst, src) {
+  dst.posX = src.posX;
+  dst.posY = src.posY;
+  dst.prevX = src.prevX;
+  dst.prevY = src.prevY;
+  dst.velX = src.velX;
+  dst.velY = src.velY;
+}
+
 class Material {
   constructor(name, restDensity, stiffness, nearStiffness, kernelRadius) {
     this.name = name;
@@ -18,6 +27,10 @@ class Material {
     this.stiffness = stiffness;
     this.nearStiffness = nearStiffness;
     this.kernelRadius = kernelRadius;
+    this.pointSize = 5;
+    this.gravX = 0.0;
+    this.gravY = 0.5;
+    this.dt = 1;
 
     this.maxPressure = 1;
   }
@@ -30,17 +43,25 @@ class Simulator {
     this.width = width;
     this.height = height;
 
-    this.gravX = 0.0;
-    this.gravY = 0.2;
-
     this.particles = [];
     this.addParticles(numParticles);
 
     this.screenX = window.screenX;
     this.screenY = window.screenY;
 
+    this.mouseX = width / 2;
+    this.mouseY = height / 2;
+    this.attract = false;
+    this.repel = false;
+    this.emit = false;
+    this.drain = false;
+    this.drag = false;
+
+    this.mousePrevX = this.mouseX;
+    this.mousePrevY = this.mouseY;
+
     this.useSpatialHash = true;
-    this.numHashBuckets = 5000;
+    this.numHashBuckets = 10000;
     this.numActiveBuckets = 0;
     this.activeBuckets = [];
     this.particleListHeads = []; // Same size as numHashBuckets, each points to first particle in bucket list
@@ -52,7 +73,7 @@ class Simulator {
 
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
 
-    this.material = new Material("water", 2, 0.5, 0.5, 40);
+    this.material = new Material("water", .5, 0.5, 0.5, 40);
   }
 
   start() { this.running = true; }
@@ -74,39 +95,135 @@ class Simulator {
     }
   }
 
+  emitParticles() {
+    const emitRate = 10;
+
+    for (let i = 0; i < emitRate; i++) {
+      const posX = this.mouseX + Math.random() * 10 - 5;
+      const posY = this.mouseY + Math.random() * 10 - 5;
+      const velX = Math.random() * 2 - 1;
+      const velY = Math.random() * 2 - 1;
+
+      this.particles.push(new Particle(posX, posY, velX, velY));
+    }
+  }
+
+  drainParticles() {
+    let numParticles = this.particles.length;
+
+    for (let i = 0; i < numParticles; i++) {
+      let p = this.particles[i];
+
+      const dx = p.posX - this.mouseX;
+      const dy = p.posY - this.mouseY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < 10000) {
+        moveParticleData(p, this.particles[numParticles - 1]);
+        numParticles--;
+      }
+    }
+
+    this.particles.length = numParticles;
+  }
+
   draw(ctx) {
     ctx.save();
-    ctx.translate(-5, -5);
+
+    const pointSize = this.material.pointSize;
+
+    ctx.translate(-.5 * pointSize, -.5 * pointSize);
 
     for (let p of this.particles) {
-      ctx.fillRect(p.posX, p.posY, 10, 10);
+      const speed = (p.velX * p.velX + p.velY * p.velY);
+      ctx.fillStyle = `rgb(${speed}, ${speed * 0.4 + 153}, 255)`;
+
+      ctx.fillRect(p.posX, p.posY, pointSize, pointSize);
     }
 
     ctx.restore();
   }
 
   // Algorithm 1: Simulation step
-  update(dt = 1) {
+  update() {
+    const screenMoveX = window.screenX - this.screenX;
+    const screenMoveY = window.screenY - this.screenY;
+    this.screenX = window.screenX;
+    this.screenY = window.screenY;
+
+    const dragX = this.mouseX - this.mousePrevX;
+    const dragY = this.mouseY - this.mousePrevY;
+    this.mousePrevX = this.mouseX;
+    this.mousePrevY = this.mouseY;
+
     if (!this.running) {
       return;
     }
 
-    const screenMoveX = window.screenX - this.screenX;
-    const screenMoveY = window.screenY - this.screenY;
+    if (this.emit) {
+      this.emitParticles();
+    }
 
-    this.screenX = window.screenX;
-    this.screenY = window.screenY;
+    if (this.drain) {
+      this.drainParticles();
+    }
+
+    const dt = this.material.dt;
+
+    const gravX = this.material.gravX * dt;
+    const gravY = this.material.gravY * dt;
+
+    let attractRepel = this.attract ? 0.3 : 0;
+    attractRepel -= this.repel ? 0.3 : 0;
+    const arNonZero = attractRepel !== 0;
 
     for (let p of this.particles) {
       // apply gravity
-      p.velX += this.gravX * dt;
-      p.velY += this.gravY * dt;
+      p.velX += gravX;
+      p.velY += gravY;
+
+      if (arNonZero) {
+        let dx = p.posX - this.mouseX;
+        let dy = p.posY - this.mouseY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < 100000 && distSq > 0.1) {
+          const dist = Math.sqrt(distSq);
+          const invDist = 1 / dist;
+
+          dx *= invDist;
+          dy *= invDist;
+
+          p.velX -= attractRepel * dx;
+          p.velY -= attractRepel * dy;
+        }
+      }
+
+      if (this.drag) {
+        let dx = p.posX - this.mouseX;
+        let dy = p.posY - this.mouseY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < 10000 && distSq > 0.1) {
+          const dist = Math.sqrt(distSq);
+          const invDist = 1 / dist;
+
+          p.velX = dragX;
+          p.velY = dragY;
+        }
+      }
 
       p.posX -= screenMoveX;
       p.posY -= screenMoveY;
     }
 
     this.applyViscosity(dt);
+
+    const boundaryMul = 0.5 * dt; // 1 is no bounce, 2 is full bounce
+    const boundaryMinX = 5;
+    const boundaryMaxX = this.width - 5;
+    const boundaryMinY = 5;
+    const boundaryMaxY = this.height - 5;
 
     for (let p of this.particles) {
       // save previous position
@@ -116,6 +233,19 @@ class Simulator {
       // advance to predicted position
       p.posX += p.velX * dt;
       p.posY += p.velY * dt;
+
+      // Could do boundary both before and after density relaxation
+      // if (p.posX < boundaryMinX) {
+      //   p.posX += boundaryMul * (boundaryMinX - p.posX);
+      // } else if (p.posX > boundaryMaxX) {
+      //   p.posX += boundaryMul * (boundaryMaxX - p.posX);
+      // }
+
+      // if (p.posY < boundaryMinY) {
+      //   p.posY += boundaryMul * (boundaryMinY - p.posY);
+      // } else if (p.posY > boundaryMaxY) {
+      //   p.posY += boundaryMul * (boundaryMaxY - p.posY);
+      // }
     }
 
     this.populateHashGrid();
@@ -125,10 +255,12 @@ class Simulator {
     this.doubleDensityRelaxation(dt);
     this.resolveCollisions(dt);
 
+    const dtInv = 1 / dt;
+
     for (let p of this.particles) {
       // use previous position to calculate new velocity
-      p.velX = (p.posX - p.prevX) / dt;
-      p.velY = (p.posY - p.prevY) / dt;
+      p.velX = (p.posX - p.prevX) * dtInv;
+      p.velY = (p.posY - p.prevY) * dtInv;
     }
   }
 
@@ -139,11 +271,11 @@ class Simulator {
     const kernelRadiusInv = 1.0 / kernelRadius;
 
     const restDensity = this.material.restDensity;
-    const stiffness = this.material.stiffness;
-    const nearStiffness = this.material.nearStiffness;
+    const stiffness = this.material.stiffness * dt * dt;
+    const nearStiffness = this.material.nearStiffness * dt * dt;
 
     // Neighbor cache
-    const neighborIndices = [];
+    const neighbors = [];
     const neighborUnitX = [];
     const neighborUnitY = [];
     const neighborCloseness = [];
@@ -236,7 +368,7 @@ class Simulator {
                 density += closeness * closeness;
                 nearDensity += closeness * closenessSq;
 
-                neighborIndices[numNeighbors] = neighborIdx;
+                neighbors[numNeighbors] = this.particles[neighborIdx];
                 neighborUnitX[numNeighbors] = diffX / r;
                 neighborUnitY[numNeighbors] = diffY / r;
                 neighborCloseness[numNeighbors] = closeness;
@@ -249,49 +381,51 @@ class Simulator {
         }
 
         // Add wall density
-        if (p0.posX < softMinX) {
-          wallCloseness[0] = 1 - (softMinX - Math.max(boundaryMinX, p0.posX)) * kernelRadiusInv;
-          wallDirection[0] = 1;
-        } else if (p0.posX > softMaxX) {
-          wallCloseness[0] = 1 - (Math.min(boundaryMaxX, p0.posX) - softMaxX) * kernelRadiusInv;
-          wallDirection[0] = -1;
-        } else {
-          wallCloseness[0] = 0;
-        }
+        // if (p0.posX < softMinX) {
+        //   wallCloseness[0] = 1 - (softMinX - Math.max(boundaryMinX, p0.posX)) * kernelRadiusInv;
+        //   wallDirection[0] = 1;
+        // } else if (p0.posX > softMaxX) {
+        //   wallCloseness[0] = 1 - (Math.min(boundaryMaxX, p0.posX) - softMaxX) * kernelRadiusInv;
+        //   wallDirection[0] = -1;
+        // } else {
+        //   wallCloseness[0] = 0;
+        // }
 
-        if (p0.posY < softMinY) {
-          wallCloseness[1] = 1 - (softMinY - Math.max(boundaryMinY, p0.posY)) * kernelRadiusInv;
-          wallDirection[1] = 1;
-        } else if (p0.posY > softMaxY) {
-          wallCloseness[1] = 1 - (Math.min(boundaryMaxY, p0.posY) - softMaxY) * kernelRadiusInv;
-          wallDirection[1] = -1;
-        } else {
-          wallCloseness[1] = 0;
-        }
+        // if (p0.posY < softMinY) {
+        //   wallCloseness[1] = 1 - (softMinY - Math.max(boundaryMinY, p0.posY)) * kernelRadiusInv;
+        //   wallDirection[1] = 1;
+        // } else if (p0.posY > softMaxY) {
+        //   wallCloseness[1] = 1 - (Math.min(boundaryMaxY, p0.posY) - softMaxY) * kernelRadiusInv;
+        //   wallDirection[1] = -1;
+        // } else {
+        //   wallCloseness[1] = 0;
+        // }
 
-        if (wallCloseness[0] > 0) {
-          density += wallCloseness[0] * wallCloseness[0];
-          nearDensity += wallCloseness[0] * wallCloseness[0] * wallCloseness[0];
-        }
+        // const wallMul = 1;
 
-        if (wallCloseness[1] > 0) {
-          density += wallCloseness[1] * wallCloseness[1];
-          nearDensity += wallCloseness[1] * wallCloseness[1] * wallCloseness[1];
-        }
+        // if (wallCloseness[0] > 0) {
+        //   density += wallMul * wallCloseness[0] * wallCloseness[0];
+        //   nearDensity += wallMul * wallCloseness[0] * wallCloseness[0] * wallCloseness[0];
+        // }
+
+        // if (wallCloseness[1] > 0) {
+        //   density += wallMul * wallCloseness[1] * wallCloseness[1];
+        //   nearDensity += wallMul * wallCloseness[1] * wallCloseness[1] * wallCloseness[1];
+        // }
 
         // Compute pressure and near-pressure
         let pressure = stiffness * (density - restDensity);
         let nearPressure = nearStiffness * nearDensity;
-        let immisciblePressure = stiffness * (density - 1);
+        let immisciblePressure = stiffness * (density - 0);
 
-        // Clamp pressure for stability
-        const pressureSum = pressure + nearPressure;
+        // Optional: Clamp pressure for stability
+        // const pressureSum = pressure + nearPressure;
 
-        if (pressureSum > 1) {
-          const pressureMul = 1 / pressureSum;
-          pressure *= pressureMul;
-          nearPressure *= pressureMul;
-        }
+        // if (pressureSum > 1) {
+        //   const pressureMul = 1 / pressureSum;
+        //   pressure *= pressureMul;
+        //   nearPressure *= pressureMul;
+        // }
 
 
         // if (pressure > 1) {
@@ -306,10 +440,10 @@ class Simulator {
         let dispY = 0;
 
         for (let j = 0; j < numNeighbors; j++) {
-          let p1 = this.particles[neighborIndices[j]];
+          let p1 = neighbors[j];
 
           const closeness = neighborCloseness[j];
-          const D = dt * dt * (pressure * closeness + nearPressure * closeness * closeness) / 2;
+          const D = (pressure * closeness + nearPressure * closeness * closeness) / 2;
           const DX = D * neighborUnitX[j];
           const DY = D * neighborUnitY[j];
 
@@ -322,17 +456,6 @@ class Simulator {
           // p0.posX -= DX;
           // p0.posY -= DY;
         }
-
-        if (wallCloseness[0] > 0) {
-          const D = dt * dt * (0 * wallCloseness[0] + nearPressure * wallCloseness[0] * wallCloseness[0]) / 2;
-          p0.posX += D * wallDirection[0];
-        }
-
-        if (wallCloseness[1] > 0) {
-          const D = dt * dt * (0 * wallCloseness[1] + nearPressure * wallCloseness[1] * wallCloseness[1]) / 2;
-          p0.posY += D * wallDirection[1];
-        }
-
 
         p0.posX += dispX;
         p0.posY += dispY;
@@ -389,7 +512,7 @@ class Simulator {
   adjustSprings(dt) { }
   applyViscosity(dt) { }
   resolveCollisions(dt) {
-    const boundaryMul = 0.5 * dt; // 1 is no bounce, 2 is full bounce
+    const boundaryMul = 0.5 * dt * dt;
     const boundaryMinX = 5;
     const boundaryMaxX = this.width - 5;
     const boundaryMinY = 5;
