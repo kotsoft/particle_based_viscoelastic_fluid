@@ -47,6 +47,7 @@ class Simulator {
   draw(ctx) {
     ctx.save();
     ctx.translate(-2.5, -2.5);
+    ctx.fillStyle = "#0066FF";
 
     for (let p of this.particles) {
       ctx.fillRect(p.posX, p.posY, 5, 5);
@@ -96,7 +97,7 @@ class Simulator {
   adjustSprings(dt) { }
   applyViscosity(dt) { }
   resolveCollisions(dt) {
-    const boundaryMul = 1.9; // 1 is no bounce, 2 is full bounce
+    const boundaryMul = .5; // Soft boundary
     const boundaryMinX = 5;
     const boundaryMaxX = this.width - 5;
     const boundaryMinY = 5;

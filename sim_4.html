@@ -13,24 +13,47 @@
   <canvas id="simCanvas"></canvas>
 
   <div id="overlay">
-    <p id="fps">FPS: 0</p>
+    <div id="controls">
+      <p id="fps">FPS: 0</p>
+      <p>
+        <label for="numParticles"># Particles:</label>
+        <select name="numParticles" id="numParticles">
+          <option value="1000">1K</option>
+          <option value="2000" selected="true">2K</option>
+          <option value="5000">5K</option>
+          <option value="10000">10K</option>
+        </select>
+      </p>
+      <p>
+        <label for="useSpatialHash">Use Spatial Hash:</label>
+        <input type="checkbox" name="useSpatialHash" id="useSpatialHash" checked="true">
+      </p>
+      <p>
+        <button id="startButton">Start</button>
+        <button id="pauseButton">Pause</button>
+        <button id="stepButton">Step</button>
+        <button id="resetButton">Reset</button>
+      </p>
+
+      <p>
+        <small>
+          KB: (A)ttract, (R)epel, (E)mit, (D)rain
+        </small>
+        <br>
+        <small>
+          You can drag mouse as well as window!
+        </small>
+      </p>
+
+      <p>
+        <a href="sim_2.html">Prev</a>
+        |
+        <a href="sim_5.html">Next</a>
+      </p>
+    </div>
+
     <p>
-      <label for="numParticles"># Particles:</label>
-      <select name="numParticles" id="numParticles">
-        <option value="1000">1K</option>
-        <option value="2000">2K</option>
-        <option value="5000">5K</option>
-        <option value="10000">10K</option>
-      </select>
-    </p>
-    <p>
-      <label for="useSpatialHash">Use Spatial Hash:</label>
-      <input type="checkbox" name="useSpatialHash" id="useSpatialHash" checked="true">
-    </p>
-    <p>
-      <button id="startButton">Start</button>
-      <button id="pauseButton">Pause</button>
-      <button id="resetButton">Reset</button>
+      <button id="collapseButton">Collapse</button>
     </p>
   </div>
 

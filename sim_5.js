@@ -8,6 +8,8 @@ class Particle {
 
     this.velX = velX;
     this.velY = velY;
+
+    this.springs = {}
   }
 }
 
@@ -32,7 +34,23 @@ class Material {
     this.gravY = 0.5;
     this.dt = 1;
 
+    this.springStiffness = 0.0;
+    this.plasticity = 0.5; // alpha
+    this.yieldRatio = 0.25; // gamma
+    this.minDistRatio = .25; // prevents the springs from getting too short
+
+    this.linViscosity = 0.0;
+    this.quadViscosity = 0.1;
+
     this.maxPressure = 1;
+  }
+}
+
+class Spring {
+  constructor(particleIdxA, particleIdxB, restLength) {
+    this.particleIdxA = particleIdxA;
+    this.particleIdxB = particleIdxB;
+    this.restLength = restLength;
   }
 }
 
@@ -76,6 +94,8 @@ class Simulator {
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
 
     this.material = new Material("water", 4, 0.5, 0.5, 40);
+
+    this.springHash = {};
   }
 
   start() { this.running = true; }
@@ -136,9 +156,11 @@ class Simulator {
 
     ctx.translate(-.5 * pointSize, -.5 * pointSize);
 
+    ctx.fillStyle = "#00CC00";
+
     for (let p of this.particles) {
       const speed = (p.velX * p.velX + p.velY * p.velY) * 2;
-      ctx.fillStyle = `rgb(${speed}, ${speed * 0.4 + 153}, 255)`;
+      ctx.fillStyle = `rgb(${speed}, 255, 0)`;
 
       ctx.fillRect(p.posX, p.posY, pointSize, pointSize);
     }
@@ -295,6 +317,9 @@ class Simulator {
     const stiffness = this.material.stiffness * dt * dt;
     const nearStiffness = this.material.nearStiffness * dt * dt;
 
+    const minDistRatio = this.material.minDistRatio;
+    const minDist = minDistRatio * kernelRadius;
+
     // Neighbor cache
     const neighbors = [];
     const neighborUnitX = [];
@@ -316,6 +341,8 @@ class Simulator {
     const softMaxX = boundaryMaxX - kernelRadius;
     const softMinY = boundaryMinY + kernelRadius;
     const softMaxY = boundaryMaxY - kernelRadius;
+
+    const addSprings = this.material.springStiffness > 0;
 
 
     for (let abIdx = 0; abIdx < numActiveBuckets; abIdx++) {
@@ -389,11 +416,17 @@ class Simulator {
                 density += closeness * closeness;
                 nearDensity += closeness * closenessSq;
 
-                neighbors[numNeighbors] = this.particles[neighborIdx];
+                neighbors[numNeighbors] = p1;
                 neighborUnitX[numNeighbors] = diffX / r;
                 neighborUnitY[numNeighbors] = diffY / r;
                 neighborCloseness[numNeighbors] = closeness;
                 numNeighbors++;
+
+                // Add spring if not already present
+                // TODO: this JS hash thing is absolutely crazy but curious how it performs
+                if (addSprings && selfIdx < neighborIdx && r > minDist && !p0.springs[neighborIdx]) {
+                  p0.springs[neighborIdx] = r;
+                }
               }
 
               neighborIdx = this.particleListNextIdx[neighborIdx];
@@ -401,34 +434,6 @@ class Simulator {
           }
         }
 
-        // Add wall density
-        // if (p0.posX < softMinX) {
-        //   wallCloseness[0] = 1 - (softMinX - Math.max(boundaryMinX, p0.posX)) * kernelRadiusInv;
-        // } else if (p0.posX > softMaxX) {
-        //   wallCloseness[0] = 1 - (Math.min(boundaryMaxX, p0.posX) - softMaxX) * kernelRadiusInv;
-        // } else {
-        //   wallCloseness[0] = 0;
-        // }
-
-        // if (p0.posY < softMinY) {
-        //   wallCloseness[1] = 1 - (softMinY - Math.max(boundaryMinY, p0.posY)) * kernelRadiusInv;
-        // } else if (p0.posY > softMaxY) {
-        //   wallCloseness[1] = 1 - (Math.min(boundaryMaxY, p0.posY) - softMaxY) * kernelRadiusInv;
-        // } else {
-        //   wallCloseness[1] = 0;
-        // }
-
-        // const wallMul = 1;
-
-        // if (wallCloseness[0] > 0) {
-        //   density += wallMul * wallCloseness[0] * wallCloseness[0];
-        //   nearDensity += wallMul * wallCloseness[0] * wallCloseness[0] * wallCloseness[0];
-        // }
-
-        // if (wallCloseness[1] > 0) {
-        //   density += wallMul * wallCloseness[1] * wallCloseness[1];
-        //   nearDensity += wallMul * wallCloseness[1] * wallCloseness[1] * wallCloseness[1];
-        // }
 
         // Compute pressure and near-pressure
         let pressure = stiffness * (density - restDensity);
@@ -525,15 +530,194 @@ class Simulator {
     }
   }
 
-  applySpringDisplacements(dt) { }
-  adjustSprings(dt) { }
-  applyViscosity(dt) { }
+  applySpringDisplacements(dt) {
+    if (this.material.springStiffness === 0) {
+      return;
+    }
+
+
+    const kernelRadius = this.material.kernelRadius; // h
+    const kernelRadiusInv = 1.0 / kernelRadius;
+
+    const springStiffness = this.material.springStiffness * dt * dt;
+    const plasticity = this.material.plasticity * dt; // alpha
+    const yieldRatio = this.material.yieldRatio; // gamma
+    const minDistRatio = this.material.minDistRatio;
+    const minDist = minDistRatio * kernelRadius;
+
+    for (let particle of this.particles) {
+      // TODO: maybe optimize this by using a list of springs instead of a hash
+      for (let springIdx of Object.keys(particle.springs)) {
+        let restLength = particle.springs[springIdx];
+
+        let springParticle = this.particles[springIdx];
+
+        let dx = particle.posX - springParticle.posX;
+        let dy = particle.posY - springParticle.posY;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+
+        const tolerableDeformation = yieldRatio * restLength;
+
+
+        if (dist > restLength + tolerableDeformation) {
+          restLength = restLength + plasticity * (dist - restLength - tolerableDeformation);
+          particle.springs[springIdx] = restLength;
+        } else if (dist < restLength - tolerableDeformation && dist > minDist) {
+          restLength = restLength - plasticity * (restLength - tolerableDeformation - dist);
+          particle.springs[springIdx] = restLength;
+        }
+
+        if (restLength < minDist) {
+          restLength = minDist;
+          particle.springs[springIdx] = restLength;
+        }
+
+        if (restLength > kernelRadius) {
+          delete particle.springs[springIdx];
+          continue;
+        }
+
+        let D = springStiffness * (1 - restLength * kernelRadiusInv) * (dist - restLength) / dist;
+        dx *= D;
+        dy *= D;
+
+        particle.posX -= dx;
+        particle.posY -= dy;
+
+        springParticle.posX += dx;
+        springParticle.posY += dy;
+      }
+    }
+  }
+  adjustSprings(dt) {
+    // adjust springs has been moved to be done together with apply spring displacements
+  }
+  applyViscosity(dt) {
+    if (this.material.linViscosity === 0 && this.material.quadViscosity === 0) {
+      return;
+    }
+
+    const numActiveBuckets = this.numActiveBuckets;
+    const visitedBuckets = [];
+
+    const kernelRadius = this.material.kernelRadius; // h
+    const kernelRadiusSq = kernelRadius * kernelRadius;
+    const kernelRadiusInv = 1.0 / kernelRadius;
+
+    const linViscosity = this.material.linViscosity * dt;
+    const quadViscosity = this.material.quadViscosity * dt;
+
+    for (let abIdx = 0; abIdx < numActiveBuckets; abIdx++) {
+      let selfIdx = this.particleListHeads[this.activeBuckets[abIdx]];
+
+      while (selfIdx != -1) {
+        let p0 = this.particles[selfIdx];
+
+        let density = 0;
+        let nearDensity = 0;
+
+        let numNeighbors = 0;
+        let numVisitedBuckets = 0;
+
+        // Compute density and near-density
+        const bucketX = Math.floor(p0.posX * kernelRadiusInv);
+        const bucketY = Math.floor(p0.posY * kernelRadiusInv);
+
+        for (let bucketDX = -1; bucketDX <= 1; bucketDX++) {
+          for (let bucketDY = -1; bucketDY <= 1; bucketDY++) {
+            const bucketIdx = this.getHashBucketIdx(Math.floor(bucketX + bucketDX), Math.floor(bucketY + bucketDY));
+
+            // Check hash collision
+            let found = false;
+            for (let k = 0; k < numVisitedBuckets; k++) {
+              if (visitedBuckets[k] === bucketIdx) {
+                found = true;
+                break;
+              }
+            }
+
+            if (found) {
+              continue;
+            }
+
+            visitedBuckets[numVisitedBuckets] = bucketIdx;
+            numVisitedBuckets++;
+
+            let neighborIdx = this.particleListHeads[bucketIdx];
+
+            while (neighborIdx != -1) {
+              if (neighborIdx === selfIdx) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              let p1 = this.particles[neighborIdx];
+
+              const diffX = p1.posX - p0.posX;
+
+              if (diffX > kernelRadius || diffX < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const diffY = p1.posY - p0.posY;
+
+              if (diffY > kernelRadius || diffY < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const rSq = diffX * diffX + diffY * diffY;
+
+              if (rSq < kernelRadiusSq) {
+                const r = Math.sqrt(rSq);
+                const q = r * kernelRadiusInv;
+                const closeness = 1 - q;
+                const closenessSq = closeness * closeness;
+
+                // inward radial velocity
+                const dx = diffX / r;
+                const dy = diffY / r;
+                let inwardVel = ((p0.velX - p1.velX) * dx + (p0.velY - p1.velY) * dy);
+
+                if (inwardVel > 1) {
+                  inwardVel = 1;
+                }
+
+                if (inwardVel > 0) {
+                  // linear and quadratic impulses
+                  const I = closeness * (linViscosity * inwardVel + quadViscosity * inwardVel * inwardVel) * .5;
+                  const IX = I * dx;
+                  const IY = I * dy;
+                  p0.velX -= IX;
+                  p0.velY -= IY;
+                  p1.velX += IX;
+                  p1.velY += IY;
+                }
+              }
+
+              neighborIdx = this.particleListNextIdx[neighborIdx];
+            }
+          }
+        }
+
+        selfIdx = this.particleListNextIdx[selfIdx];
+      }
+    }
+  }
   resolveCollisions(dt) {
     const boundaryMul = 0.5 * dt * dt;
     const boundaryMinX = 5;
     const boundaryMaxX = this.width - 5;
     const boundaryMinY = 5;
     const boundaryMaxY = this.height - 5;
+
+    const kWallStickiness = 0.5;
+    const kWallStickDist = 2;
+    const stickMinX = boundaryMinX + kWallStickDist;
+    const stickMaxX = boundaryMaxX - kWallStickDist;
+    const stickMinY = boundaryMinY + kWallStickDist;
+    const stickMaxY = boundaryMaxY - kWallStickDist;
 
 
     for (let p of this.particles) {
