@@ -39,6 +39,9 @@ class Material {
     this.yieldRatio = 0.25; // gamma
     this.minDistRatio = .25; // prevents the springs from getting too short
 
+    this.linViscosity = 0.1;
+    this.quadViscosity = 0.1;
+
     this.maxPressure = 1;
   }
 }
@@ -322,7 +325,6 @@ class Simulator {
     const neighborUnitX = [];
     const neighborUnitY = [];
     const neighborCloseness = [];
-    const neighborRadialVel = [];
     const visitedBuckets = [];
 
     const numActiveBuckets = this.numActiveBuckets;
@@ -339,6 +341,8 @@ class Simulator {
     const softMaxX = boundaryMaxX - kernelRadius;
     const softMinY = boundaryMinY + kernelRadius;
     const softMaxY = boundaryMaxY - kernelRadius;
+
+    const addSprings = this.material.springStiffness > 0;
 
 
     for (let abIdx = 0; abIdx < numActiveBuckets; abIdx++) {
@@ -412,22 +416,15 @@ class Simulator {
                 density += closeness * closeness;
                 nearDensity += closeness * closenessSq;
 
-                const dx = diffX / r;
-                const dy = diffY / r;
-
-                // inward radial velocity
-                const radialVel = (p0.velX - p1.velX) * dx + (p0.velY - p1.velY) * dy;
-
                 neighbors[numNeighbors] = p1;
-                neighborUnitX[numNeighbors] = dx;
-                neighborUnitY[numNeighbors] = dy;
-                neighborRadialVel[numNeighbors] = radialVel;
+                neighborUnitX[numNeighbors] = diffX / r;
+                neighborUnitY[numNeighbors] = diffY / r;
                 neighborCloseness[numNeighbors] = closeness;
                 numNeighbors++;
 
                 // Add spring if not already present
                 // TODO: this JS hash thing is absolutely crazy but curious how it performs
-                if (selfIdx < neighborIdx && r > minDist && !p0.springs[neighborIdx]) {
+                if (addSprings && selfIdx < neighborIdx && r > minDist && !p0.springs[neighborIdx]) {
                   p0.springs[neighborIdx] = r;
                 }
               }
@@ -437,34 +434,6 @@ class Simulator {
           }
         }
 
-        // Add wall density
-        // if (p0.posX < softMinX) {
-        //   wallCloseness[0] = 1 - (softMinX - Math.max(boundaryMinX, p0.posX)) * kernelRadiusInv;
-        // } else if (p0.posX > softMaxX) {
-        //   wallCloseness[0] = 1 - (Math.min(boundaryMaxX, p0.posX) - softMaxX) * kernelRadiusInv;
-        // } else {
-        //   wallCloseness[0] = 0;
-        // }
-
-        // if (p0.posY < softMinY) {
-        //   wallCloseness[1] = 1 - (softMinY - Math.max(boundaryMinY, p0.posY)) * kernelRadiusInv;
-        // } else if (p0.posY > softMaxY) {
-        //   wallCloseness[1] = 1 - (Math.min(boundaryMaxY, p0.posY) - softMaxY) * kernelRadiusInv;
-        // } else {
-        //   wallCloseness[1] = 0;
-        // }
-
-        // const wallMul = 1;
-
-        // if (wallCloseness[0] > 0) {
-        //   density += wallMul * wallCloseness[0] * wallCloseness[0];
-        //   nearDensity += wallMul * wallCloseness[0] * wallCloseness[0] * wallCloseness[0];
-        // }
-
-        // if (wallCloseness[1] > 0) {
-        //   density += wallMul * wallCloseness[1] * wallCloseness[1];
-        //   nearDensity += wallMul * wallCloseness[1] * wallCloseness[1] * wallCloseness[1];
-        // }
 
         // Compute pressure and near-pressure
         let pressure = stiffness * (density - restDensity);
@@ -562,6 +531,11 @@ class Simulator {
   }
 
   applySpringDisplacements(dt) {
+    if (this.material.springStiffness === 0) {
+      return;
+    }
+
+
     const kernelRadius = this.material.kernelRadius; // h
     const kernelRadiusInv = 1.0 / kernelRadius;
 
@@ -572,10 +546,7 @@ class Simulator {
     const minDist = minDistRatio * kernelRadius;
 
     for (let particle of this.particles) {
-      const numSprings = particle.springs.length;
-
-
-
+      // TODO: maybe optimize this by using a list of springs instead of a hash
       for (let springIdx of Object.keys(particle.springs)) {
         let restLength = particle.springs[springIdx];
 
@@ -593,6 +564,11 @@ class Simulator {
           particle.springs[springIdx] = restLength;
         } else if (dist < restLength - tolerableDeformation && dist > minDist) {
           restLength = restLength - plasticity * (restLength - tolerableDeformation - dist);
+          particle.springs[springIdx] = restLength;
+        }
+
+        if (restLength < minDist) {
+          restLength = minDist;
           particle.springs[springIdx] = restLength;
         }
 
@@ -616,7 +592,119 @@ class Simulator {
   adjustSprings(dt) {
     // adjust springs has been moved to be done together with apply spring displacements
   }
-  applyViscosity(dt) { }
+  applyViscosity(dt) {
+    if (this.material.linViscosity === 0 && this.material.quadViscosity === 0) {
+      return;
+    }
+
+    const numActiveBuckets = this.numActiveBuckets;
+    const visitedBuckets = [];
+
+    const kernelRadius = this.material.kernelRadius; // h
+    const kernelRadiusSq = kernelRadius * kernelRadius;
+    const kernelRadiusInv = 1.0 / kernelRadius;
+
+    const linViscosity = this.material.linViscosity * dt;
+    const quadViscosity = this.material.quadViscosity * dt;
+
+    for (let abIdx = 0; abIdx < numActiveBuckets; abIdx++) {
+      let selfIdx = this.particleListHeads[this.activeBuckets[abIdx]];
+
+      while (selfIdx != -1) {
+        let p0 = this.particles[selfIdx];
+
+        let density = 0;
+        let nearDensity = 0;
+
+        let numNeighbors = 0;
+        let numVisitedBuckets = 0;
+
+        // Compute density and near-density
+        const bucketX = Math.floor(p0.posX * kernelRadiusInv);
+        const bucketY = Math.floor(p0.posY * kernelRadiusInv);
+
+        for (let bucketDX = -1; bucketDX <= 1; bucketDX++) {
+          for (let bucketDY = -1; bucketDY <= 1; bucketDY++) {
+            const bucketIdx = this.getHashBucketIdx(Math.floor(bucketX + bucketDX), Math.floor(bucketY + bucketDY));
+
+            // Check hash collision
+            let found = false;
+            for (let k = 0; k < numVisitedBuckets; k++) {
+              if (visitedBuckets[k] === bucketIdx) {
+                found = true;
+                break;
+              }
+            }
+
+            if (found) {
+              continue;
+            }
+
+            visitedBuckets[numVisitedBuckets] = bucketIdx;
+            numVisitedBuckets++;
+
+            let neighborIdx = this.particleListHeads[bucketIdx];
+
+            while (neighborIdx != -1) {
+              if (neighborIdx === selfIdx) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              let p1 = this.particles[neighborIdx];
+
+              const diffX = p1.posX - p0.posX;
+
+              if (diffX > kernelRadius || diffX < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const diffY = p1.posY - p0.posY;
+
+              if (diffY > kernelRadius || diffY < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const rSq = diffX * diffX + diffY * diffY;
+
+              if (rSq < kernelRadiusSq) {
+                const r = Math.sqrt(rSq);
+                const q = r * kernelRadiusInv;
+                const closeness = 1 - q;
+                const closenessSq = closeness * closeness;
+
+                // inward radial velocity
+                const dx = diffX / r;
+                const dy = diffY / r;
+                let inwardVel = ((p0.velX - p1.velX) * dx + (p0.velY - p1.velY) * dy);
+
+                if (inwardVel > 1) {
+                  inwardVel = 1;
+                }
+
+                if (inwardVel > 0) {
+                  // linear and quadratic impulses
+                  const I = closeness * (linViscosity * inwardVel + quadViscosity * inwardVel * inwardVel) * .5;
+                  const IX = I * dx;
+                  const IY = I * dy;
+                  p0.velX -= IX;
+                  p0.velY -= IY;
+                  p1.velX += IX;
+                  p1.velY += IY;
+                }
+              }
+
+              neighborIdx = this.particleListNextIdx[neighborIdx];
+            }
+          }
+        }
+
+        selfIdx = this.particleListNextIdx[selfIdx];
+      }
+    }
+  }
   resolveCollisions(dt) {
     const boundaryMul = 0.5 * dt * dt;
     const boundaryMinX = 5;

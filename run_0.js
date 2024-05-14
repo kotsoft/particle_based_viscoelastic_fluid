@@ -25,7 +25,7 @@ function loop() {
 loop();
 
 // Event listeners
-const materialSliders = ["restDensity", "stiffness", "nearStiffness", "springStiffness", "plasticity", "yieldRatio", "kernelRadius", "pointSize", "gravX", "gravY", "dt"];
+const materialSliders = ["restDensity", "stiffness", "nearStiffness", "springStiffness", "plasticity", "yieldRatio", "minDistRatio", "linViscosity", "quadViscosity", "kernelRadius", "pointSize", "gravX", "gravY", "dt"];
 
 for (let sliderId of materialSliders) {
   let slider = document.getElementById(sliderId);
