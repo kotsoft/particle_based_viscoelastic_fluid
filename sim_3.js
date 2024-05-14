@@ -48,6 +48,8 @@ class Simulator {
 
     this.screenX = window.screenX;
     this.screenY = window.screenY;
+    this.screenMoveSmootherX = 0;
+    this.screenMoveSmootherY = 0;
 
     this.mouseX = width / 2;
     this.mouseY = height / 2;
@@ -61,7 +63,7 @@ class Simulator {
     this.mousePrevY = this.mouseY;
 
     this.useSpatialHash = true;
-    this.numHashBuckets = 10000;
+    this.numHashBuckets = 5000;
     this.numActiveBuckets = 0;
     this.activeBuckets = [];
     this.particleListHeads = []; // Same size as numHashBuckets, each points to first particle in bucket list
@@ -135,21 +137,40 @@ class Simulator {
     ctx.translate(-.5 * pointSize, -.5 * pointSize);
 
     for (let p of this.particles) {
-      const speed = (p.velX * p.velX + p.velY * p.velY);
+      const speed = (p.velX * p.velX + p.velY * p.velY) * 2;
       ctx.fillStyle = `rgb(${speed}, ${speed * 0.4 + 153}, 255)`;
 
       ctx.fillRect(p.posX, p.posY, pointSize, pointSize);
     }
 
     ctx.restore();
+
+    // ctx.beginPath();
+
+    // ctx.strokeStyle = "#0066FF";
+
+    // for (let p of this.particles) {
+    //   ctx.moveTo(p.posX, p.posY);
+    //   ctx.lineTo(p.posX - p.velX, p.posY - p.velY);
+    // }
+
+    // ctx.stroke();
+
   }
 
   // Algorithm 1: Simulation step
   update() {
-    const screenMoveX = window.screenX - this.screenX;
-    const screenMoveY = window.screenY - this.screenY;
+    this.screenMoveSmootherX += window.screenX - this.screenX;
+    this.screenMoveSmootherY += window.screenY - this.screenY;
     this.screenX = window.screenX;
     this.screenY = window.screenY;
+
+    const maxScreenMove = 50;
+    const screenMoveX = this.screenMoveSmootherX > maxScreenMove ? maxScreenMove : this.screenMoveSmootherX < -maxScreenMove ? -maxScreenMove : this.screenMoveSmootherX;
+    const screenMoveY = this.screenMoveSmootherY > maxScreenMove ? maxScreenMove : this.screenMoveSmootherY < -maxScreenMove ? -maxScreenMove : this.screenMoveSmootherY;
+
+    this.screenMoveSmootherX -= screenMoveX;
+    this.screenMoveSmootherY -= screenMoveY;
 
     const dragX = this.mouseX - this.mousePrevX;
     const dragY = this.mouseY - this.mousePrevY;
@@ -170,11 +191,11 @@ class Simulator {
 
     const dt = this.material.dt;
 
-    const gravX = this.material.gravX * dt;
-    const gravY = this.material.gravY * dt;
+    const gravX = 0.02 * this.material.kernelRadius * this.material.gravX * dt;
+    const gravY = 0.02 * this.material.kernelRadius * this.material.gravY * dt;
 
-    let attractRepel = this.attract ? 0.3 : 0;
-    attractRepel -= this.repel ? 0.3 : 0;
+    let attractRepel = this.attract ? 0.01 * this.material.kernelRadius : 0;
+    attractRepel -= this.repel ? 0.01 * this.material.kernelRadius : 0;
     const arNonZero = attractRepel !== 0;
 
     for (let p of this.particles) {
@@ -383,20 +404,16 @@ class Simulator {
         // Add wall density
         // if (p0.posX < softMinX) {
         //   wallCloseness[0] = 1 - (softMinX - Math.max(boundaryMinX, p0.posX)) * kernelRadiusInv;
-        //   wallDirection[0] = 1;
         // } else if (p0.posX > softMaxX) {
         //   wallCloseness[0] = 1 - (Math.min(boundaryMaxX, p0.posX) - softMaxX) * kernelRadiusInv;
-        //   wallDirection[0] = -1;
         // } else {
         //   wallCloseness[0] = 0;
         // }
 
         // if (p0.posY < softMinY) {
         //   wallCloseness[1] = 1 - (softMinY - Math.max(boundaryMinY, p0.posY)) * kernelRadiusInv;
-        //   wallDirection[1] = 1;
         // } else if (p0.posY > softMaxY) {
         //   wallCloseness[1] = 1 - (Math.min(boundaryMaxY, p0.posY) - softMaxY) * kernelRadiusInv;
-        //   wallDirection[1] = -1;
         // } else {
         //   wallCloseness[1] = 0;
         // }
@@ -428,13 +445,13 @@ class Simulator {
         // }
 
 
-        // if (pressure > 1) {
-        //   pressure = 1;
-        // }
+        if (pressure > 1) {
+          pressure = 1;
+        }
 
-        // if (nearPressure > 1) {
-        //   nearPressure = 1;
-        // }
+        if (nearPressure > 1) {
+          nearPressure = 1;
+        }
 
         let dispX = 0;
         let dispY = 0;

@@ -8,6 +8,7 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let simulator = new Simulator(canvas.width, canvas.height, numParticles);
+simulator.running = true;
 
 const fpsMonitor = new FPSMonitor();
 

@@ -51,6 +51,8 @@ class Simulator {
     ctx.save();
     ctx.translate(-5, -5);
 
+    ctx.fillStyle = "#0066FF";
+
     for (let p of this.particles) {
       ctx.fillRect(p.posX, p.posY, 10, 10);
     }
