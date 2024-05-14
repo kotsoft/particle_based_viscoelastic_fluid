@@ -27,7 +27,8 @@ class Simulator {
     this.screenX = window.screenX;
     this.screenY = window.screenY;
 
-    this.numHashBuckets = 20000;
+    this.useSpatialHash = true;
+    this.numHashBuckets = 1000;
     this.particleListHeads = []; // Same size as numHashBuckets, each points to first particle in bucket list
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
   }
@@ -115,9 +116,9 @@ class Simulator {
     const kernelRadiusSq = kernelRadius * kernelRadius;
     const kernelRadiusInv = 1.0 / kernelRadius;
 
-    const restDensity = 4;
-    const stiffness = 1.;
-    const nearStiffness = 1.;
+    const restDensity = 2;
+    const stiffness = .5;
+    const nearStiffness = 0.5;
 
     // Neighbor cache
     const neighborIndices = [];
@@ -133,95 +134,99 @@ class Simulator {
 
       let numNeighbors = 0;
 
-      // Compute density and near-density
-      const bucketX = Math.floor(p0.posX * kernelRadiusInv);
-      const bucketY = Math.floor(p0.posY * kernelRadiusInv);
+      if (this.useSpatialHash) {
 
-      for (let bucketDX = -1; bucketDX <= 1; bucketDX++) {
-        for (let bucketDY = -1; bucketDY <= 1; bucketDY++) {
-          const bucketIdx = this.getHashBucketIdx(Math.floor(bucketX + bucketDX), Math.floor(bucketY + bucketDY));
+        // Compute density and near-density
+        const bucketX = Math.floor(p0.posX * kernelRadiusInv);
+        const bucketY = Math.floor(p0.posY * kernelRadiusInv);
 
-          let neighborIdx = this.particleListHeads[bucketIdx];
+        for (let bucketDX = -1; bucketDX <= 1; bucketDX++) {
+          for (let bucketDY = -1; bucketDY <= 1; bucketDY++) {
+            const bucketIdx = this.getHashBucketIdx(Math.floor(bucketX + bucketDX), Math.floor(bucketY + bucketDY));
 
-          while (neighborIdx != -1) {
-            if (neighborIdx <= i) {
+            let neighborIdx = this.particleListHeads[bucketIdx];
+
+            while (neighborIdx != -1) {
+              if (neighborIdx <= i) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              let p1 = this.particles[neighborIdx];
+
+              const diffX = p1.posX - p0.posX;
+
+              if (diffX > kernelRadius || diffX < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const diffY = p1.posY - p0.posY;
+
+              if (diffY > kernelRadius || diffY < -kernelRadius) {
+                neighborIdx = this.particleListNextIdx[neighborIdx];
+                continue;
+              }
+
+              const rSq = diffX * diffX + diffY * diffY;
+
+              if (rSq < kernelRadiusSq) {
+                const r = Math.sqrt(rSq);
+                const q = r * kernelRadiusInv;
+                const closeness = 1 - q;
+                const closenessSq = closeness * closeness;
+
+                density += closeness * closeness;
+                nearDensity += closeness * closenessSq;
+
+                neighborIndices[numNeighbors] = neighborIdx;
+                neighborUnitX[numNeighbors] = diffX / r;
+                neighborUnitY[numNeighbors] = diffY / r;
+                neighborCloseness[numNeighbors] = closeness;
+                numNeighbors++;
+              }
+
               neighborIdx = this.particleListNextIdx[neighborIdx];
-              continue;
             }
+          }
+        }
+      } else {
+        // The old n^2 way
 
-            let p1 = this.particles[neighborIdx];
+        for (let j = i + 1; j < numParticles; j++) {
+          let p1 = this.particles[j];
 
-            const diffX = p1.posX - p0.posX;
+          const diffX = p1.posX - p0.posX;
 
-            if (diffX > kernelRadius || diffX < -kernelRadius) {
-              neighborIdx = this.particleListNextIdx[neighborIdx];
-              continue;
-            }
+          if (diffX > kernelRadius || diffX < -kernelRadius) {
+            continue;
+          }
 
-            const diffY = p1.posY - p0.posY;
+          const diffY = p1.posY - p0.posY;
 
-            if (diffY > kernelRadius || diffY < -kernelRadius) {
-              neighborIdx = this.particleListNextIdx[neighborIdx];
-              continue;
-            }
+          if (diffY > kernelRadius || diffY < -kernelRadius) {
+            continue;
+          }
 
-            const rSq = diffX * diffX + diffY * diffY;
+          const rSq = diffX * diffX + diffY * diffY;
 
-            if (rSq < kernelRadiusSq) {
-              const r = Math.sqrt(rSq);
-              const q = r * kernelRadiusInv;
-              const closeness = 1 - q;
-              const closenessSq = closeness * closeness;
+          if (rSq < kernelRadiusSq) {
+            const r = Math.sqrt(rSq);
+            const q = r / kernelRadius;
+            const closeness = 1 - q;
+            const closenessSq = closeness * closeness;
 
-              density += closeness * closeness;
-              nearDensity += closeness * closenessSq;
+            density += closeness * closeness;
+            nearDensity += closeness * closenessSq;
 
-              neighborIndices[numNeighbors] = neighborIdx;
-              neighborUnitX[numNeighbors] = diffX / r;
-              neighborUnitY[numNeighbors] = diffY / r;
-              neighborCloseness[numNeighbors] = closeness;
-              numNeighbors++;
-            }
-
-            neighborIdx = this.particleListNextIdx[neighborIdx];
+            neighborIndices[numNeighbors] = j;
+            neighborUnitX[numNeighbors] = diffX / r;
+            neighborUnitY[numNeighbors] = diffY / r;
+            neighborCloseness[numNeighbors] = closeness;
+            numNeighbors++;
           }
         }
       }
-
-      // The old n^2 way
-      // for (let j = i + 1; j < numParticles; j++) {
-      //   let p1 = this.particles[j];
-
-      //   const diffX = p1.posX - p0.posX;
-
-      //   if (diffX > kernelRadius || diffX < -kernelRadius) {
-      //     continue;
-      //   }
-
-      //   const diffY = p1.posY - p0.posY;
-
-      //   if (diffY > kernelRadius || diffY < -kernelRadius) {
-      //     continue;
-      //   }
-
-      //   const rSq = diffX * diffX + diffY * diffY;
-
-      //   if (rSq < kernelRadiusSq) {
-      //     const r = Math.sqrt(rSq);
-      //     const q = r / kernelRadius;
-      //     const closeness = 1 - q;
-      //     const closenessSq = closeness * closeness;
-
-      //     density += closeness * closeness;
-      //     nearDensity += closeness * closenessSq;
-
-      //     neighborIndices[numNeighbors] = j;
-      //     neighborUnitX[numNeighbors] = diffX / r;
-      //     neighborUnitY[numNeighbors] = diffY / r;
-      //     neighborCloseness[numNeighbors] = closeness;
-      //     numNeighbors++;
-      //   }
-      // }
 
       // Add wall density
       const closestX = Math.min(p0.posX, this.width - p0.posX);

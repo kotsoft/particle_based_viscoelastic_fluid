@@ -45,6 +45,10 @@ document.getElementById("numParticles").addEventListener("input", (e) => {
   simulator = new Simulator(canvas.width, canvas.height, numParticles);
 });
 
+document.getElementById("useSpatialHash").addEventListener("change", (e) => {
+  simulator.useSpatialHash = e.target.checked;
+});
+
 window.addEventListener("resize", () => {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
