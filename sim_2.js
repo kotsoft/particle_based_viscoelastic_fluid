@@ -19,13 +19,17 @@ class Simulator {
     this.height = height;
 
     this.gravX = 0.0;
-    this.gravY = 0.5;
+    this.gravY = 0.2;
 
     this.particles = [];
     this.addParticles(numParticles);
 
     this.screenX = window.screenX;
     this.screenY = window.screenY;
+
+    this.numHashBuckets = 20000;
+    this.particleListHeads = []; // Same size as numHashBuckets, each points to first particle in bucket list
+    this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
   }
 
   start() { this.running = true; }
@@ -91,6 +95,8 @@ class Simulator {
       p.posY += p.velY * dt;
     }
 
+    this.populateHashGrid();
+
     this.adjustSprings(dt);
     this.applySpringDisplacements(dt);
     this.doubleDensityRelaxation(dt);
@@ -107,10 +113,11 @@ class Simulator {
     const numParticles = this.particles.length;
     const kernelRadius = 40; // h
     const kernelRadiusSq = kernelRadius * kernelRadius;
+    const kernelRadiusInv = 1.0 / kernelRadius;
 
-    const restDensity = 2;
-    const stiffness = 1.0;
-    const nearStiffness = .5;
+    const restDensity = 4;
+    const stiffness = 1.;
+    const nearStiffness = 1.;
 
     // Neighbor cache
     const neighborIndices = [];
@@ -127,39 +134,94 @@ class Simulator {
       let numNeighbors = 0;
 
       // Compute density and near-density
-      for (let j = i + 1; j < numParticles; j++) {
-        let p1 = this.particles[j];
+      const bucketX = Math.floor(p0.posX * kernelRadiusInv);
+      const bucketY = Math.floor(p0.posY * kernelRadiusInv);
 
-        const diffX = p1.posX - p0.posX;
+      for (let bucketDX = -1; bucketDX <= 1; bucketDX++) {
+        for (let bucketDY = -1; bucketDY <= 1; bucketDY++) {
+          const bucketIdx = this.getHashBucketIdx(Math.floor(bucketX + bucketDX), Math.floor(bucketY + bucketDY));
 
-        if (diffX > kernelRadius || diffX < -kernelRadius) {
-          continue;
-        }
+          let neighborIdx = this.particleListHeads[bucketIdx];
 
-        const diffY = p1.posY - p0.posY;
+          while (neighborIdx != -1) {
+            if (neighborIdx <= i) {
+              neighborIdx = this.particleListNextIdx[neighborIdx];
+              continue;
+            }
 
-        if (diffY > kernelRadius || diffY < -kernelRadius) {
-          continue;
-        }
+            let p1 = this.particles[neighborIdx];
 
-        const rSq = diffX * diffX + diffY * diffY;
+            const diffX = p1.posX - p0.posX;
 
-        if (rSq < kernelRadiusSq) {
-          const r = Math.sqrt(rSq);
-          const q = r / kernelRadius;
-          const closeness = 1 - q;
-          const closenessSq = closeness * closeness;
+            if (diffX > kernelRadius || diffX < -kernelRadius) {
+              neighborIdx = this.particleListNextIdx[neighborIdx];
+              continue;
+            }
 
-          density += closeness * closeness;
-          nearDensity += closeness * closenessSq;
+            const diffY = p1.posY - p0.posY;
 
-          neighborIndices[numNeighbors] = j;
-          neighborUnitX[numNeighbors] = diffX / r;
-          neighborUnitY[numNeighbors] = diffY / r;
-          neighborCloseness[numNeighbors] = closeness;
-          numNeighbors++;
+            if (diffY > kernelRadius || diffY < -kernelRadius) {
+              neighborIdx = this.particleListNextIdx[neighborIdx];
+              continue;
+            }
+
+            const rSq = diffX * diffX + diffY * diffY;
+
+            if (rSq < kernelRadiusSq) {
+              const r = Math.sqrt(rSq);
+              const q = r * kernelRadiusInv;
+              const closeness = 1 - q;
+              const closenessSq = closeness * closeness;
+
+              density += closeness * closeness;
+              nearDensity += closeness * closenessSq;
+
+              neighborIndices[numNeighbors] = neighborIdx;
+              neighborUnitX[numNeighbors] = diffX / r;
+              neighborUnitY[numNeighbors] = diffY / r;
+              neighborCloseness[numNeighbors] = closeness;
+              numNeighbors++;
+            }
+
+            neighborIdx = this.particleListNextIdx[neighborIdx];
+          }
         }
       }
+
+      // The old n^2 way
+      // for (let j = i + 1; j < numParticles; j++) {
+      //   let p1 = this.particles[j];
+
+      //   const diffX = p1.posX - p0.posX;
+
+      //   if (diffX > kernelRadius || diffX < -kernelRadius) {
+      //     continue;
+      //   }
+
+      //   const diffY = p1.posY - p0.posY;
+
+      //   if (diffY > kernelRadius || diffY < -kernelRadius) {
+      //     continue;
+      //   }
+
+      //   const rSq = diffX * diffX + diffY * diffY;
+
+      //   if (rSq < kernelRadiusSq) {
+      //     const r = Math.sqrt(rSq);
+      //     const q = r / kernelRadius;
+      //     const closeness = 1 - q;
+      //     const closenessSq = closeness * closeness;
+
+      //     density += closeness * closeness;
+      //     nearDensity += closeness * closenessSq;
+
+      //     neighborIndices[numNeighbors] = j;
+      //     neighborUnitX[numNeighbors] = diffX / r;
+      //     neighborUnitY[numNeighbors] = diffY / r;
+      //     neighborCloseness[numNeighbors] = closeness;
+      //     numNeighbors++;
+      //   }
+      // }
 
       // Add wall density
       const closestX = Math.min(p0.posX, this.width - p0.posX);
@@ -207,6 +269,36 @@ class Simulator {
 
       p0.posX += dispX;
       p0.posY += dispY;
+    }
+  }
+
+  // Mueller 10 minute physics
+  getHashBucketIdx(bucketX, bucketY) {
+    const h = ((bucketX * 92837111) ^ (bucketY * 689287499));
+    return Math.abs(h) % this.numHashBuckets;
+  }
+
+  populateHashGrid() {
+    // Clear the hash grid
+    for (let i = 0; i < this.numHashBuckets; i++) {
+      this.particleListHeads[i] = -1;
+    }
+
+    // Populate the hash grid
+    const numParticles = this.particles.length;
+    const bucketSize = 40; // Same as kernel radius
+    const bucketSizeInv = 1.0 / bucketSize;
+
+    for (let i = 0; i < numParticles; i++) {
+      let p = this.particles[i];
+
+      const bucketX = Math.floor(p.posX * bucketSizeInv);
+      const bucketY = Math.floor(p.posY * bucketSizeInv);
+
+      const bucketIdx = this.getHashBucketIdx(bucketX, bucketY);
+
+      this.particleListNextIdx[i] = this.particleListHeads[bucketIdx];
+      this.particleListHeads[bucketIdx] = i;
     }
   }
 
