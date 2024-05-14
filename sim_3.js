@@ -75,7 +75,7 @@ class Simulator {
 
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
 
-    this.material = new Material("water", .5, 0.5, 0.5, 40);
+    this.material = new Material("water", 4, 0.5, 0.5, 40);
   }
 
   start() { this.running = true; }

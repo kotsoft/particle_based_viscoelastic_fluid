@@ -13,20 +13,34 @@
   <canvas id="simCanvas"></canvas>
 
   <div id="overlay">
-    <p id="fps">FPS: 0</p>
+    <div id="controls">
+      <p id="fps">FPS: 0</p>
+      <p>
+        <label for="numParticles"># Particles:</label>
+        <select name="numParticles" id="numParticles">
+          <option value="2000" selected="true">2K</option>
+          <option value="10000">10K</option>
+          <option value="100000">100K</option>
+          <option value="1000000">1M</option>
+        </select>
+      </p>
+      <p>
+        <button id="startButton">Start</button>
+        <button id="pauseButton">Pause</button>
+        <button id="stepButton">Step</button>
+        <button id="resetButton">Reset</button>
+      </p>
+      <p>
+        <small>
+          You can drag window around.
+        </small>
+      </p>
+      <p>
+        <a href="sim_1.html">Next</a>
+      </p>
+    </div>
     <p>
-      <label for="numParticles"># Particles:</label>
-      <select name="numParticles" id="numParticles">
-        <option value="1000">1K</option>
-        <option value="10000">10K</option>
-        <option value="100000">100K</option>
-        <option value="1000000">1M</option>
-      </select>
-    </p>
-    <p>
-      <button id="startButton">Start</button>
-      <button id="pauseButton">Pause</button>
-      <button id="resetButton">Reset</button>
+      <button id="collapseButton">Collapse</button>
     </p>
   </div>
 

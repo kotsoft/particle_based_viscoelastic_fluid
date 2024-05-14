@@ -34,12 +34,12 @@ class Material {
     this.gravY = 0.5;
     this.dt = 1;
 
-    this.springStiffness = 0.1;
+    this.springStiffness = 0.0;
     this.plasticity = 0.5; // alpha
     this.yieldRatio = 0.25; // gamma
     this.minDistRatio = .25; // prevents the springs from getting too short
 
-    this.linViscosity = 0.1;
+    this.linViscosity = 0.0;
     this.quadViscosity = 0.1;
 
     this.maxPressure = 1;
@@ -93,7 +93,7 @@ class Simulator {
 
     this.particleListNextIdx = []; // Same size as particles list, each points to next particle in bucket list
 
-    this.material = new Material("water", .5, 0.5, 0.5, 40);
+    this.material = new Material("water", 4, 0.5, 0.5, 40);
 
     this.springHash = {};
   }
@@ -156,11 +156,11 @@ class Simulator {
 
     ctx.translate(-.5 * pointSize, -.5 * pointSize);
 
-    ctx.fillStyle = "#006600";
+    ctx.fillStyle = "#00CC00";
 
     for (let p of this.particles) {
-      // const speed = (p.velX * p.velX + p.velY * p.velY) * 2;
-      // ctx.fillStyle = `rgb(${speed}, ${speed * 0.4 + 153}, 255)`;
+      const speed = (p.velX * p.velX + p.velY * p.velY) * 2;
+      ctx.fillStyle = `rgb(${speed}, 255, 0)`;
 
       ctx.fillRect(p.posX, p.posY, pointSize, pointSize);
     }
@@ -711,6 +711,13 @@ class Simulator {
     const boundaryMaxX = this.width - 5;
     const boundaryMinY = 5;
     const boundaryMaxY = this.height - 5;
+
+    const kWallStickiness = 0.5;
+    const kWallStickDist = 2;
+    const stickMinX = boundaryMinX + kWallStickDist;
+    const stickMaxX = boundaryMaxX - kWallStickDist;
+    const stickMinY = boundaryMinY + kWallStickDist;
+    const stickMaxY = boundaryMaxY - kWallStickDist;
 
 
     for (let p of this.particles) {

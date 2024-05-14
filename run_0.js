@@ -1,5 +1,5 @@
 // Options
-let numParticles = 1000;
+let numParticles = 2000;
 
 // Setup a simulation
 const canvas = document.getElementById("simCanvas");
@@ -8,7 +8,7 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let simulator = new Simulator(canvas.width, canvas.height, numParticles);
-// simulator.running = true;
+simulator.running = true;
 
 const fpsMonitor = new FPSMonitor();
 
@@ -62,6 +62,22 @@ document.getElementById("stepButton").addEventListener("click", () => {
 document.getElementById("resetButton").addEventListener("click", () => {
   simulator = new Simulator(canvas.width, canvas.height, numParticles);
 });
+
+let collapseButton = document.getElementById("collapseButton");
+
+if (collapseButton) {
+  document.getElementById("collapseButton").addEventListener("click", () => {
+    let controls = document.getElementById("controls");
+
+    if (controls.style.display == "none") {
+      controls.style.display = "block";
+      collapseButton.innerText = "Collapse";
+    } else {
+      controls.style.display = "none";
+      collapseButton.innerText = "Expand";
+    }
+  });
+}
 
 document.getElementById("numParticles").addEventListener("input", (e) => {
   if (e.target.value == numParticles) {
