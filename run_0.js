@@ -8,7 +8,7 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let simulator = new Simulator(canvas.width, canvas.height, numParticles);
-simulator.running = true;
+// simulator.running = true;
 
 const fpsMonitor = new FPSMonitor();
 
@@ -25,7 +25,7 @@ function loop() {
 loop();
 
 // Event listeners
-const materialSliders = ["restDensity", "stiffness", "nearStiffness", "kernelRadius", "pointSize", "gravX", "gravY", "dt"];
+const materialSliders = ["restDensity", "stiffness", "nearStiffness", "springStiffness", "plasticity", "yieldRatio", "kernelRadius", "pointSize", "gravX", "gravY", "dt"];
 
 for (let sliderId of materialSliders) {
   let slider = document.getElementById(sliderId);
@@ -51,6 +51,12 @@ document.getElementById("startButton").addEventListener("click", () => {
 
 document.getElementById("pauseButton").addEventListener("click", () => {
   simulator.pause();
+});
+
+document.getElementById("stepButton").addEventListener("click", () => {
+  simulator.running = true;
+  simulator.update();
+  simulator.running = false;
 });
 
 document.getElementById("resetButton").addEventListener("click", () => {
