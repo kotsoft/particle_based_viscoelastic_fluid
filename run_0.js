@@ -110,12 +110,6 @@ window.addEventListener("pointermove", (e) => {
 });
 
 window.addEventListener("pointerdown", (e) => {
-  // Account for first-frame drags (on mobile)
-  simulator.mouseX = e.clientX;
-  simulator.mouseY = e.clientY;
-  simulator.mousePrevX = e.clientY;
-  simulator.mousePrevY = e.clientY;
-
   if (e.button == 0) {
     simulator.drag = true;
   }
