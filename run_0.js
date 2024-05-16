@@ -104,18 +104,24 @@ window.addEventListener("resize", () => {
   simulator.resize(canvas.width, canvas.height);
 });
 
-window.addEventListener("mousemove", (e) => {
+window.addEventListener("pointermove", (e) => {
   simulator.mouseX = e.clientX;
   simulator.mouseY = e.clientY;
 });
 
-window.addEventListener("mousedown", (e) => {
+window.addEventListener("pointerdown", (e) => {
+  // Account for first-frame drags (on mobile)
+  simulator.mouseX = e.clientX;
+  simulator.mouseY = e.clientY;
+  simulator.mousePrevX = e.clientY;
+  simulator.mousePrevY = e.clientY;
+
   if (e.button == 0) {
     simulator.drag = true;
   }
 });
 
-window.addEventListener("mouseup", (e) => {
+window.addEventListener("pointerup", (e) => {
   if (e.button == 0) {
     simulator.drag = false;
   }
